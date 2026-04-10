@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
 function makeVertexShader(gridSize) {
-    const half = gridSize / 2;
-    return `
+  const half = gridSize / 2;
+  return `
     varying vec2 vUv;
     varying vec3 vNormal;
 
@@ -19,8 +19,12 @@ function makeVertexShader(gridSize) {
 }
 
 const fragmentShader = `
-  uniform sampler2D uGrassTex;
-  uniform sampler2D uPaintMap;
+  uniform sampler2D uTex0;
+  uniform sampler2D uTex1;
+  uniform sampler2D uTex2;
+  uniform sampler2D uPaintMap0;
+  uniform sampler2D uPaintMap1;
+  uniform sampler2D uPaintMap2;
   uniform vec3 uDirtColor;
   uniform float uTexRepeat;
 
@@ -28,18 +32,34 @@ const fragmentShader = `
   varying vec3 vNormal;
 
   void main() {
-    vec4 c1 = texture2D(uGrassTex, vUv * uTexRepeat);
-    vec4 c2 = texture2D(uGrassTex, vUv * uTexRepeat * 0.37 + vec2(0.15, 0.73));
-    vec4 c3 = texture2D(uGrassTex, vUv * uTexRepeat * 2.71 + vec2(0.54, 0.21));
-    vec4 grassColor = c1 * 0.5 + c2 * 0.35 + c3 * 0.15;
+    vec4 c0a = texture2D(uTex0, vUv * uTexRepeat);
+    vec4 c0b = texture2D(uTex0, vUv * uTexRepeat * 0.37 + vec2(0.15, 0.73));
+    vec4 c0c = texture2D(uTex0, vUv * uTexRepeat * 2.71 + vec2(0.54, 0.21));
+    vec4 tex0Color = c0a * 0.5 + c0b * 0.35 + c0c * 0.15;
 
-    float paintAlpha = texture2D(uPaintMap, vUv).r;
+    vec4 c1a = texture2D(uTex1, vUv * uTexRepeat);
+    vec4 c1b = texture2D(uTex1, vUv * uTexRepeat * 0.37 + vec2(0.15, 0.73));
+    vec4 c1c = texture2D(uTex1, vUv * uTexRepeat * 2.71 + vec2(0.54, 0.21));
+    vec4 tex1Color = c1a * 0.5 + c1b * 0.35 + c1c * 0.15;
+
+    vec4 c2a = texture2D(uTex2, vUv * uTexRepeat);
+    vec4 c2b = texture2D(uTex2, vUv * uTexRepeat * 0.37 + vec2(0.15, 0.73));
+    vec4 c2c = texture2D(uTex2, vUv * uTexRepeat * 2.71 + vec2(0.54, 0.21));
+    vec4 tex2Color = c2a * 0.5 + c2b * 0.35 + c2c * 0.15;
+
+    float alpha0 = texture2D(uPaintMap0, vUv).r;
+    float alpha1 = texture2D(uPaintMap1, vUv).r;
+    float alpha2 = texture2D(uPaintMap2, vUv).r;
 
     vec3 lightDir = normalize(vec3(1.0, 2.0, 1.0));
     float light = clamp(dot(vNormal, lightDir), 0.0, 1.0) * 0.5 + 0.5;
 
-    vec3 finalColor = mix(uDirtColor, grassColor.rgb, paintAlpha);
-    gl_FragColor = vec4(finalColor * light, 1.0);
+    vec3 color = uDirtColor;
+    color = mix(color, tex0Color.rgb, alpha0);
+    color = mix(color, tex1Color.rgb, alpha1);
+    color = mix(color, tex2Color.rgb, alpha2);
+
+    gl_FragColor = vec4(color * light, 1.0);
   }
 `;
 
@@ -72,203 +92,225 @@ const brushFragShader = `
 `;
 
 export const MAP_PRESETS = [
-    { label: 'Mala',    gridSize: 150, segments: 100, paintRes: 1024 },
-    { label: 'Srednja', gridSize: 300, segments: 180, paintRes: 2048 },
-    { label: 'Velika',  gridSize: 450, segments: 220, paintRes: 2048 },
-    { label: 'Max',     gridSize: 600, segments: 250, paintRes: 4096 },
+  { label: 'Mala',    gridSize: 150, segments: 100, paintRes: 1024 },
+  { label: 'Srednja', gridSize: 300, segments: 180, paintRes: 2048 },
+  { label: 'Velika',  gridSize: 450, segments: 220, paintRes: 2048 },
+  { label: 'Max',     gridSize: 600, segments: 250, paintRes: 4096 },
 ];
 
+const MAX_LAYERS = 3;
+
 export class TerrainMesh {
-    constructor(scene) {
-        this.scene = scene;
-        this.mesh = null;
-        this.material = null;
-        this.gridSize = 300;
-        this.segments = 180;
-        this.paintMapSize = 2048; // default za Srednju
-        this.renderer = null;
-        this.grassTexture = null;
+  constructor(scene) {
+    this.scene = scene;
+    this.mesh = null;
+    this.material = null;
+    this.gridSize = 300;
+    this.segments = 180;
+    this.paintMapSize = 2048;
+    this.renderer = null;
+    this.textures = [];
 
-        // kreiramo targete sa ispravnom default rezolucijom
-        this.paintTargetA = null;
-        this.paintTargetB = null;
-        this.currentPaint = null;
-        this.previousPaint = null;
+    this.paintTargetsA = [];
+    this.paintTargetsB = [];
+    this.currentPaints = [];
+    this.previousPaints = [];
 
-        this.paintScene = new THREE.Scene();
-        this.paintCamera = new THREE.OrthographicCamera(0, 1, 1, 0, -1, 1);
-        this.brushPaintMat = null;
+    this.paintScene = new THREE.Scene();
+    this.paintCamera = new THREE.OrthographicCamera(0, 1, 1, 0, -1, 1);
+    this.brushPaintMat = null;
+  }
+
+  _createRenderTargets(size) {
+    this.paintTargetsA.forEach(t => t.dispose());
+    this.paintTargetsB.forEach(t => t.dispose());
+    this.paintTargetsA = [];
+    this.paintTargetsB = [];
+    this.currentPaints = [];
+    this.previousPaints = [];
+
+    for (let i = 0; i < MAX_LAYERS; i++) {
+      const a = new THREE.WebGLRenderTarget(size, size, {
+        format: THREE.RGBAFormat,
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+      });
+      const b = new THREE.WebGLRenderTarget(size, size, {
+        format: THREE.RGBAFormat,
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+      });
+      this.paintTargetsA.push(a);
+      this.paintTargetsB.push(b);
+      this.currentPaints.push(a);
+      this.previousPaints.push(b);
+    }
+  }
+
+  init(textures, renderer, paintRes = 2048) {
+    this.renderer = renderer;
+    this.textures = textures;
+    this.paintMapSize = paintRes;
+    this._createRenderTargets(paintRes);
+    this._initPaintScene();
+    this._buildMesh();
+  }
+
+  _buildMesh() {
+    if (this.mesh) {
+      this.scene.remove(this.mesh);
+      this.mesh.geometry.dispose();
+      this.mesh.material.dispose();
+      this.mesh = null;
     }
 
-    _createRenderTargets(size) {
-        if (this.paintTargetA) this.paintTargetA.dispose();
-        if (this.paintTargetB) this.paintTargetB.dispose();
+    const geo = new THREE.PlaneGeometry(
+      this.gridSize, this.gridSize,
+      this.segments, this.segments
+    );
+    geo.rotateX(-Math.PI / 2);
 
-        this.paintTargetA = new THREE.WebGLRenderTarget(size, size, {
-            format: THREE.RGBAFormat,
-            minFilter: THREE.LinearFilter,
-            magFilter: THREE.LinearFilter,
-        });
-        this.paintTargetB = new THREE.WebGLRenderTarget(size, size, {
-            format: THREE.RGBAFormat,
-            minFilter: THREE.LinearFilter,
-            magFilter: THREE.LinearFilter,
-        });
-        this.currentPaint = this.paintTargetA;
-        this.previousPaint = this.paintTargetB;
+    const texRepeat = (this.gridSize / 150) * 8.0;
+
+    this.material = new THREE.ShaderMaterial({
+      uniforms: {
+        uTex0:      { value: this.textures[0] || null },
+        uTex1:      { value: this.textures[1] || null },
+        uTex2:      { value: this.textures[2] || null },
+        uPaintMap0: { value: this.currentPaints[0].texture },
+        uPaintMap1: { value: this.currentPaints[1].texture },
+        uPaintMap2: { value: this.currentPaints[2].texture },
+        uDirtColor: { value: new THREE.Color(0x3d2b1f) },
+        uTexRepeat: { value: texRepeat },
+      },
+      vertexShader: makeVertexShader(this.gridSize),
+      fragmentShader,
+    });
+
+    this.mesh = new THREE.Mesh(geo, this.material);
+    this.mesh.receiveShadow = true;
+    this.mesh.userData.paintable = true;
+    this.scene.add(this.mesh);
+  }
+
+  resize(gridSize, segments, paintRes, renderer) {
+    this.gridSize = gridSize;
+    this.segments = segments;
+
+    if (paintRes !== this.paintMapSize) {
+      this.paintMapSize = paintRes;
+      this._createRenderTargets(paintRes);
     }
 
-    init(grassTexture, renderer, paintRes = 2048) {
-        this.renderer = renderer;
-        this.grassTexture = grassTexture;
-        this.paintMapSize = paintRes;
+    this._buildMesh();
+    this._clearAllTargets();
+    this._updatePaintUniforms();
+  }
 
-        // kreiraj targete sa ispravnom rezolucijom od pocetka
-        this._createRenderTargets(paintRes);
-        this._initPaintScene();
-        this._buildMesh();
+  initPaintMap() {
+    this._clearAllTargets();
+  }
+
+  _initPaintScene() {
+    this.brushPaintMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uPrevPaint:     { value: null },
+        uBrushPos:      { value: new THREE.Vector2(0.5, 0.5) },
+        uBrushRadius:   { value: 0.05 },
+        uBrushStrength: { value: 1.0 },
+        uErasing:       { value: 0.0 },
+      },
+      vertexShader: brushVertShader,
+      fragmentShader: brushFragShader,
+      depthTest: false,
+      depthWrite: false,
+    });
+
+    const quad = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      this.brushPaintMat
+    );
+    quad.position.set(0.5, 0.5, 0);
+    this.paintScene.add(quad);
+  }
+
+  _clearTarget(target) {
+    const clearMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const clearGeo = new THREE.PlaneGeometry(1, 1);
+    const clearQuad = new THREE.Mesh(clearGeo, clearMat);
+    clearQuad.position.set(0.5, 0.5, 0);
+    const s = new THREE.Scene();
+    s.add(clearQuad);
+    const c = new THREE.OrthographicCamera(0, 1, 1, 0, -1, 1);
+    const prev = this.renderer.getRenderTarget();
+    this.renderer.setRenderTarget(target);
+    this.renderer.render(s, c);
+    this.renderer.setRenderTarget(prev);
+    clearMat.dispose();
+    clearGeo.dispose();
+  }
+
+  _clearAllTargets() {
+    if (!this.renderer) return;
+    for (let i = 0; i < MAX_LAYERS; i++) {
+      this._clearTarget(this.paintTargetsA[i]);
+      this._clearTarget(this.paintTargetsB[i]);
     }
+    this._updatePaintUniforms();
+  }
 
-    _buildMesh() {
+  _updatePaintUniforms() {
+    if (!this.material) return;
+    this.material.uniforms.uPaintMap0.value = this.currentPaints[0].texture;
+    this.material.uniforms.uPaintMap1.value = this.currentPaints[1].texture;
+    this.material.uniforms.uPaintMap2.value = this.currentPaints[2].texture;
+  }
 
-        const texRepeat = (this.gridSize / 150) * 8.0;
+  worldPointToUV(worldPoint) {
+    const half = this.gridSize / 2;
+    return new THREE.Vector2(
+      (worldPoint.x + half) / this.gridSize,
+      (worldPoint.z + half) / this.gridSize
+    );
+  }
 
-        if (this.mesh) {
-            this.scene.remove(this.mesh);
-            this.mesh.geometry.dispose();
-            this.mesh.material.dispose();
-            this.mesh = null;
-        }
+  paintAt(layerIndex, uv, brushRadius, brushStrength, erasing, renderer) {
+    const tmp = this.currentPaints[layerIndex];
+    this.currentPaints[layerIndex] = this.previousPaints[layerIndex];
+    this.previousPaints[layerIndex] = tmp;
 
-        const geo = new THREE.PlaneGeometry(
-            this.gridSize, this.gridSize,
-            this.segments, this.segments
-        );
-        geo.rotateX(-Math.PI / 2);
+    this.brushPaintMat.uniforms.uPrevPaint.value = this.previousPaints[layerIndex].texture;
+    this.brushPaintMat.uniforms.uBrushPos.value.set(uv.x, uv.y);
+    this.brushPaintMat.uniforms.uBrushRadius.value = brushRadius;
+    this.brushPaintMat.uniforms.uBrushStrength.value = brushStrength;
+    this.brushPaintMat.uniforms.uErasing.value = erasing ? 1.0 : 0.0;
 
-        this.material = new THREE.ShaderMaterial({
-            uniforms: {
-                uGrassTex: { value: this.grassTexture },
-                uPaintMap: { value: this.currentPaint.texture },
-                uDirtColor: { value: new THREE.Color(0x3d2b1f) },
-                uTexRepeat: { value: texRepeat },
-            },
-            vertexShader: makeVertexShader(this.gridSize),
-            fragmentShader,
-        });
+    renderer.setRenderTarget(this.currentPaints[layerIndex]);
+    renderer.render(this.paintScene, this.paintCamera);
+    renderer.setRenderTarget(null);
 
-        this.mesh = new THREE.Mesh(geo, this.material);
-        this.mesh.receiveShadow = true;
-        this.mesh.userData.paintable = true;
-        this.scene.add(this.mesh);
+    this._updatePaintUniforms();
+  }
+
+  getMesh() { return this.mesh; }
+  getGeometry() { return this.mesh?.geometry || null; }
+
+  clear(renderer) {
+    if (!this.mesh) return;
+    const pos = this.mesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) pos.setY(i, 0);
+    pos.needsUpdate = true;
+    this.mesh.geometry.computeVertexNormals();
+    this._clearAllTargets();
+  }
+
+  destroy() {
+    if (this.mesh) {
+      this.scene.remove(this.mesh);
+      this.mesh.geometry.dispose();
+      this.mesh.material.dispose();
     }
-
-    resize(gridSize, segments, paintRes, renderer) {
-        this.gridSize = gridSize;
-        this.segments = segments;
-
-        if (paintRes !== this.paintMapSize) {
-            this.paintMapSize = paintRes;
-            this._createRenderTargets(paintRes);
-        }
-
-        this._buildMesh();
-        this._clearBothTargets();
-        this.material.uniforms.uPaintMap.value = this.currentPaint.texture;
-    }
-
-    initPaintMap() {
-        this._clearBothTargets();
-    }
-
-    _initPaintScene() {
-        this.brushPaintMat = new THREE.ShaderMaterial({
-            uniforms: {
-                uPrevPaint: { value: null },
-                uBrushPos: { value: new THREE.Vector2(0.5, 0.5) },
-                uBrushRadius: { value: 0.05 },
-                uBrushStrength: { value: 1.0 },
-                uErasing: { value: 0.0 },
-            },
-            vertexShader: brushVertShader,
-            fragmentShader: brushFragShader,
-            depthTest: false,
-            depthWrite: false,
-        });
-
-        const quad = new THREE.Mesh(
-            new THREE.PlaneGeometry(1, 1),
-            this.brushPaintMat
-        );
-        quad.position.set(0.5, 0.5, 0);
-        this.paintScene.add(quad);
-    }
-
-    _clearBothTargets() {
-        if (!this.renderer) return;
-        const clearMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-        const clearGeo = new THREE.PlaneGeometry(1, 1);
-        const clearQuad = new THREE.Mesh(clearGeo, clearMat);
-        clearQuad.position.set(0.5, 0.5, 0);
-        const s = new THREE.Scene();
-        s.add(clearQuad);
-        const c = new THREE.OrthographicCamera(0, 1, 1, 0, -1, 1);
-        const prev = this.renderer.getRenderTarget();
-        this.renderer.setRenderTarget(this.paintTargetA);
-        this.renderer.render(s, c);
-        this.renderer.setRenderTarget(this.paintTargetB);
-        this.renderer.render(s, c);
-        this.renderer.setRenderTarget(prev);
-        clearMat.dispose();
-        clearGeo.dispose();
-    }
-
-    worldPointToUV(worldPoint) {
-        const half = this.gridSize / 2;
-        return new THREE.Vector2(
-            (worldPoint.x + half) / this.gridSize,
-            (worldPoint.z + half) / this.gridSize
-        );
-    }
-
-    paintAt(uv, brushRadius, brushStrength, erasing, renderer) {
-        const tmp = this.currentPaint;
-        this.currentPaint = this.previousPaint;
-        this.previousPaint = tmp;
-
-        this.brushPaintMat.uniforms.uPrevPaint.value = this.previousPaint.texture;
-        this.brushPaintMat.uniforms.uBrushPos.value.set(uv.x, uv.y);
-        this.brushPaintMat.uniforms.uBrushRadius.value = brushRadius;
-        this.brushPaintMat.uniforms.uBrushStrength.value = brushStrength;
-        this.brushPaintMat.uniforms.uErasing.value = erasing ? 1.0 : 0.0;
-
-        renderer.setRenderTarget(this.currentPaint);
-        renderer.render(this.paintScene, this.paintCamera);
-        renderer.setRenderTarget(null);
-
-        this.material.uniforms.uPaintMap.value = this.currentPaint.texture;
-    }
-
-    getMesh() { return this.mesh; }
-    getGeometry() { return this.mesh?.geometry || null; }
-
-    clear(renderer) {
-        if (!this.mesh) return;
-        const pos = this.mesh.geometry.attributes.position;
-        for (let i = 0; i < pos.count; i++) pos.setY(i, 0);
-        pos.needsUpdate = true;
-        this.mesh.geometry.computeVertexNormals();
-        this._clearBothTargets();
-        this.material.uniforms.uPaintMap.value = this.currentPaint.texture;
-    }
-
-    destroy() {
-        if (this.mesh) {
-            this.scene.remove(this.mesh);
-            this.mesh.geometry.dispose();
-            this.mesh.material.dispose();
-        }
-        this.paintTargetA?.dispose();
-        this.paintTargetB?.dispose();
-    }
+    this.paintTargetsA.forEach(t => t.dispose());
+    this.paintTargetsB.forEach(t => t.dispose());
+  }
 }
