@@ -1,16 +1,24 @@
-# React + Vite
+# War Lands - Map Editor
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A 3D isometric terrain editor built with React and Three.js, 
+designed as the foundation for a browser-based strategy game.
 
-Currently, two official plugins are available:
+## Features
+- 3D terrain with real-time height deformation
+- GPU-accelerated texture painting (WebGL render targets)
+- Custom GLSL shaders with multi-scale sampling (no tiling artifacts)
+- Circular brush with adjustable size and strength
+- Camera system with dynamic boundary clamping
+- Multiple map sizes (150x150 to 600x600)
+- Q/E keyboard rotation
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Tech Stack
+- React + Vite
+- Three.js (r128)
+- WebGL / GLSL shaders
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Getting Started
+git clone https://github.com/vladimirm95/War-Lands-Frontend
+cd War-Lands-Frontend
+npm install
+npm run dev
