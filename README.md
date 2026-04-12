@@ -17,7 +17,7 @@ designed as the foundation for a browser-based strategy game.
 
 ### Textures
 - Multi-layer texture splatting (grass, dirt, desert)
-- Textures blend seamlessly — paint over each other
+- Textures blend seamlessly - paint over each other
 - Adjustable texture density slider
 
 ### Water System
@@ -39,7 +39,7 @@ designed as the foundation for a browser-based strategy game.
 - Q/E keyboard rotation
 - Scroll zoom
 - Middle-click pan
-- Camera boundary system — never shows outside the map
+- Camera boundary system - never shows outside the map
 - Reset camera button
 
 ## Tech Stack
