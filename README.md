@@ -1,4 +1,7 @@
+
 # War Lands - Map Editor
+
+<img width="2232" height="1146" alt="Screenshot 2026-04-12 124800" src="https://github.com/user-attachments/assets/44212fb7-e676-428a-b349-8a0795f57f29" />
 
 A 3D isometric terrain editor built with React and Three.js, 
 designed as the foundation for a browser-based strategy game.
