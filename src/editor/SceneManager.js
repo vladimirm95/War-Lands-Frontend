@@ -76,14 +76,29 @@ export class SceneManager {
         this.scene.add(sun);
     }
 
+    setWaterMesh(waterMesh) {
+        this._waterMesh = waterMesh;
+    }
+
+    setTerrainMesh(terrainMesh) {
+        this._terrainMesh = terrainMesh;
+    }
+
     _startLoop() {
         const loop = () => {
             this.animationId = requestAnimationFrame(loop);
+
             if (!this._firstFrameDone) {
                 this._firstFrameDone = true;
+                this.onResize();
                 this._onFirstFrameCallbacks.forEach(cb => cb());
                 this._onFirstFrameCallbacks = [];
             }
+
+            if (this._waterMesh && this._terrainMesh) {
+                this._waterMesh.update(this.camera, this.renderer, this._terrainMesh);
+            }
+
             this.renderer.render(this.scene, this.camera);
         };
         loop();
@@ -142,10 +157,17 @@ export class SceneManager {
     }
 
     onResize() {
-        const { w, h } = this._getSize();
+        const canvas = this.canvas;
+        const parent = canvas.parentElement;
+        if (!parent) return;
+
+        const w = parent.clientWidth;
+        const h = parent.clientHeight;
+        if (w === 0 || h === 0) return;
+
+        this.renderer.setSize(w, h);
         this.camera.aspect = w / h;
         this.camera.updateProjectionMatrix();
-        this.renderer.setSize(w, h);
     }
 
     destroy() {

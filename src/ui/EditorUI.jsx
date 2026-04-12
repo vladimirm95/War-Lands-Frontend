@@ -9,20 +9,22 @@ const TOOLS = [
 ];
 
 export default function EditorUI({
-                                     catalog,
-                                     selectedTexture,
-                                     onSelectTexture,
-                                     brushSize,
-                                     onBrushSize,
-                                     brushStrength,
-                                     onBrushStrength,
-                                     tool,
-                                     onTool,
-                                     onReset,
-                                     onClear,
-                                     mapPresetIndex,
-                                     onMapPreset,
+                                     catalog, selectedTexture, onSelectTexture,
+                                     brushSize, onBrushSize,
+                                     brushStrength, onBrushStrength,
+                                     texScale, onTexScale,
+                                     terrainSharpness, onTerrainSharpness,
+                                     waterSharpness, onWaterSharpness,
+                                     waterHue, onWaterHue,
+                                     foamEnabled, onFoamToggle,
+                                     waveHeight, onWaveHeight,
+                                     waveSpeed, onWaveSpeed,
+                                     tool, onTool,
+                                     onReset, onClear,
+                                     mapPresetIndex, onMapPreset,
                                  }) {
+    const hueLabel = waterHue < 0.33 ? 'Plava' : waterHue < 0.66 ? 'Teal' : 'Reka';
+
     return (
         <div style={{
             width: 190, minWidth: 190,
@@ -39,18 +41,13 @@ export default function EditorUI({
             <Section label="Veličina mape">
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
                     {MAP_PRESETS.map((preset, i) => (
-                        <button
-                            key={preset.label}
-                            onClick={() => onMapPreset(i)}
-                            style={{
-                                fontSize: 11, padding: '5px 4px', cursor: 'pointer',
-                                border: `1px solid ${mapPresetIndex === i ? '#333' : '#ccc'}`,
-                                borderRadius: 6,
-                                background: mapPresetIndex === i ? '#e8e8e8' : 'transparent',
-                                color: '#333',
-                                fontWeight: mapPresetIndex === i ? 600 : 400,
-                            }}
-                        >
+                        <button key={preset.label} onClick={() => onMapPreset(i)} style={{
+                            fontSize: 11, padding: '5px 4px', cursor: 'pointer',
+                            border: `1px solid ${mapPresetIndex === i ? '#333' : '#ccc'}`,
+                            borderRadius: 6,
+                            background: mapPresetIndex === i ? '#e8e8e8' : 'transparent',
+                            color: '#333', fontWeight: mapPresetIndex === i ? 600 : 400,
+                        }}>
                             {preset.label}
                             <div style={{ fontSize: 10, color: '#999', fontWeight: 400 }}>
                                 {preset.gridSize}x{preset.gridSize}
@@ -62,17 +59,11 @@ export default function EditorUI({
 
             <Section label="Teksture">
                 {catalog.map(({ id, label, url }) => (
-                    <div
-                        key={id}
-                        onClick={() => onSelectTexture(id)}
-                        style={{
-                            cursor: 'pointer',
-                            borderRadius: 6,
-                            border: selectedTexture === id ? '2px solid #639922' : '2px solid transparent',
-                            overflow: 'hidden',
-                            position: 'relative',
-                        }}
-                    >
+                    <div key={id} onClick={() => onSelectTexture(id)} style={{
+                        cursor: 'pointer', borderRadius: 6,
+                        border: selectedTexture === id ? '2px solid #639922' : '2px solid transparent',
+                        overflow: 'hidden', position: 'relative',
+                    }}>
                         <img src={url} alt={label} style={{ width: '100%', height: 80, objectFit: 'cover', display: 'block' }} />
                         <div style={{
                             position: 'absolute', bottom: 0, left: 0, right: 0,
@@ -83,8 +74,7 @@ export default function EditorUI({
                             <div style={{
                                 position: 'absolute', top: 4, right: 4,
                                 width: 16, height: 16, borderRadius: '50%',
-                                background: '#639922', display: 'flex',
-                                alignItems: 'center', justifyContent: 'center',
+                                background: '#639922', display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}>
                                 <svg width="10" height="10" viewBox="0 0 10 10">
                                     <polyline points="2,5 4,7 8,3" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
@@ -99,13 +89,55 @@ export default function EditorUI({
                 <SliderRow label="Veličina" value={brushSize} min={1} max={10} onChange={onBrushSize} />
                 <SliderRow label="Jačina" value={Math.round(brushStrength * 100)} min={5} max={100}
                            onChange={v => onBrushStrength(v / 100)} suffix="%" />
+                <SliderRow label="Gustina teksture" value={texScale} min={4} max={48} onChange={onTexScale} />
+                <SliderRow label="Oštrina useka" value={terrainSharpness} min={1} max={8} onChange={onTerrainSharpness} />
+            </Section>
+
+            <Section label="Voda">
+                <SliderRow label="Oštrina obale" value={waterSharpness} min={1} max={10} onChange={onWaterSharpness} />
+
+                <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                        <span style={{ fontSize: 12, color: '#666' }}>Veličina</span>
+                        <span style={{ fontSize: 12, fontWeight: 500 }}>{brushSize}</span>
+                    </div>
+                    <input
+                        type="range" min={1} max={20} step={1} value={brushSize * 2}
+                        onChange={e => onBrushSize(Number(e.target.value) / 2)}
+                        style={{ width: '100%' }}
+                    />
+                </div>
+
+                <SliderRow
+                    label="Visina talasa"
+                    value={Math.round(waveHeight * 100)}
+                    min={0} max={50}
+                    onChange={v => onWaveHeight(v / 100)}
+                />
+                <SliderRow
+                    label="Brzina talasa"
+                    value={Math.round(waveSpeed * 10)}
+                    min={0} max={30}
+                    onChange={v => onWaveSpeed(v / 10)}
+                />
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 12, color: '#666' }}>Pena na obali</span>
+                    <button onClick={() => onFoamToggle(!foamEnabled)} style={{
+                        fontSize: 11, padding: '3px 10px', cursor: 'pointer',
+                        border: `1px solid ${foamEnabled ? '#639922' : '#ccc'}`,
+                        borderRadius: 6,
+                        background: foamEnabled ? '#EAF3DE' : 'transparent',
+                        color: foamEnabled ? '#3B6D11' : '#333',
+                    }}>
+                        {foamEnabled ? 'Uklj.' : 'Isklj.'}
+                    </button>
+                </div>
             </Section>
 
             <Section label="Alat">
                 {TOOLS.map(({ id, label }) => (
-                    <ToolBtn key={id} active={tool === id} onClick={() => onTool(id)}>
-                        {label}
-                    </ToolBtn>
+                    <ToolBtn key={id} active={tool === id} onClick={() => onTool(id)}>{label}</ToolBtn>
                 ))}
             </Section>
 
@@ -157,8 +189,7 @@ function ToolBtn({ active, onClick, children }) {
             border: `1px solid ${active ? '#333' : '#ccc'}`,
             borderRadius: 6,
             background: active ? '#e8e8e8' : 'transparent',
-            color: '#333',
-            fontWeight: active ? 600 : 400,
+            color: '#333', fontWeight: active ? 600 : 400,
         }}>
             {children}
         </button>
