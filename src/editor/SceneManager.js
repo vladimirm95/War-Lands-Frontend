@@ -68,12 +68,19 @@ export class SceneManager {
     }
 
     _initLights() {
-        const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+        // povecaj ambient da model ne bude siv
+        const ambient = new THREE.AmbientLight(0xffffff, 1.2); // bilo 0.6
         this.scene.add(ambient);
-        const sun = new THREE.DirectionalLight(0xfff4e0, 1.2);
+
+        const sun = new THREE.DirectionalLight(0xfff4e0, 2.0); // bilo 1.2
         sun.position.set(30, 60, 20);
         sun.castShadow = true;
         this.scene.add(sun);
+
+        // dodaj jos jedno svetlo sa druge strane da nema tamnih strana
+        const fill = new THREE.DirectionalLight(0xffffff, 0.8);
+        fill.position.set(-30, 20, -20);
+        this.scene.add(fill);
     }
 
     setWaterMesh(waterMesh) {

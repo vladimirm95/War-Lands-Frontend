@@ -11,8 +11,8 @@ export class BrushTool {
         this.strength = 1.0;
         this.tool = 'texture';
         this.activeLayerIndex = 0;
-        this._normalUpdateCounter = 0;
         this.terrainSharpness = 1.0;
+        this._normalUpdateCounter = 0;
 
         this._initCursor();
     }
@@ -38,11 +38,17 @@ export class BrushTool {
     getCursorMesh() { return this.cursorMesh; }
     setSize(v) { this.size = Number(v); }
     setStrength(v) { this.strength = Number(v); }
-    setTool(t) { this.tool = t; }
-    setActiveLayer(index) { this.activeLayerIndex = index; }
-    setTerrainSharpness(v) {
-        this.terrainSharpness = v;
+    setTool(t) {
+        this.tool = t;
+        // promeni izgled kursora za place_object alat
+        if (this.cursorMesh) {
+            this.cursorMesh.material.color.set(
+                t === 'place_object' ? 0x22ff88 : 0xff2222
+            );
+        }
     }
+    setActiveLayer(index) { this.activeLayerIndex = index; }
+    setTerrainSharpness(v) { this.terrainSharpness = v; }
     _getRadius() { return this.size * 0.6; }
 
     _raycastHit(mouseNDC) {
@@ -59,7 +65,9 @@ export class BrushTool {
             this.cursorMesh.visible = true;
             this.cursorMesh.position.copy(hit.point);
             this.cursorMesh.position.y += 0.05;
-            this.cursorMesh.scale.setScalar(this._getRadius());
+            // za place_object manji kursor
+            const r = this.tool === 'place_object' ? 1.5 : this._getRadius();
+            this.cursorMesh.scale.setScalar(r);
         } else {
             this.cursorMesh.visible = false;
         }
@@ -70,19 +78,14 @@ export class BrushTool {
         if (!hit) return;
         const mesh = this.terrainMesh.getMesh();
         if (!mesh) return;
-
         const point = hit.point;
         const geo = mesh.geometry;
         const pos = geo.attributes.position;
         const radius = this._getRadius();
 
-        // geo.rotateX je vec primenjena - verteksi su u world orijentaciji
-        // X = world X, Y = world Y (visina), Z = world Z
         for (let i = 0; i < pos.count; i++) {
-            const vx = pos.getX(i);
-            const vz = pos.getZ(i);
-            const dx = vx - point.x;
-            const dz = vz - point.z;
+            const dx = pos.getX(i) - point.x;
+            const dz = pos.getZ(i) - point.z;
             const dist = Math.sqrt(dx * dx + dz * dz);
             if (dist <= radius) {
                 const t = dist / radius;
@@ -99,31 +102,22 @@ export class BrushTool {
         if (!hit) return;
         const mesh = this.terrainMesh.getMesh();
         if (!mesh) return;
-
         const point = hit.point;
         const geo = mesh.geometry;
         const pos = geo.attributes.position;
         const radius = this._getRadius();
-
-        // minimalni radius za falloff - sprečava kanjon efekat sa malom četkicom
         const falloffRadius = Math.max(radius, 15.0);
 
         for (let i = 0; i < pos.count; i++) {
-            const vx = pos.getX(i);
-            const vz = pos.getZ(i);
-            const dx = vx - point.x;
-            const dz = vz - point.z;
+            const dx = pos.getX(i) - point.x;
+            const dz = pos.getZ(i) - point.z;
             const dist = Math.sqrt(dx * dx + dz * dz);
-
             if (dist <= radius) {
-                // falloff se racuna na vecoj povrsini nego sto je cetrica
-                // tako ivice uvek budu blage
                 const t = dist / falloffRadius;
                 const falloff = Math.pow(1.0 - Math.min(t, 1.0), this.terrainSharpness);
                 pos.setY(i, pos.getY(i) - falloff * this.strength * 0.06);
             }
         }
-
         pos.needsUpdate = true;
         this._normalUpdateCounter++;
         if (this._normalUpdateCounter % 3 === 0) geo.computeVertexNormals();
@@ -149,9 +143,10 @@ export class BrushTool {
 
     apply(hit, renderer) {
         if (!hit) return;
-        if (this.tool === 'hill')         this.applyHill(hit);
-        if (this.tool === 'erase_height') this.applyEraseHeight(hit);
-        if (this.tool === 'texture')      this.applyTexture(hit, renderer);
-        if (this.tool === 'erase_texture') this.applyEraseTexture(hit, renderer);
+        if (this.tool === 'hill')           this.applyHill(hit);
+        if (this.tool === 'erase_height')   this.applyEraseHeight(hit);
+        if (this.tool === 'texture')        this.applyTexture(hit, renderer);
+        if (this.tool === 'erase_texture')  this.applyEraseTexture(hit, renderer);
+        // place_object se hendluje u MapEditor direktno
     }
 }

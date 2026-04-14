@@ -4,6 +4,7 @@ import { TerrainMesh, MAP_PRESETS } from './TerrainMesh';
 import { BrushTool } from './BrushTool';
 import { TextureManager } from './TextureManager';
 import { WaterMesh } from './WaterMesh';
+import { ObjectManager } from './ObjectManager';
 import EditorUI from '../ui/EditorUI';
 
 const DEFAULT_SPHERICAL = { radius: 60, phi: 0.785, theta: 0.795 };
@@ -16,6 +17,7 @@ export default function MapEditor() {
     const brushRef = useRef(null);
     const textureManagerRef = useRef(null);
     const waterRef = useRef(null);
+    const objectManagerRef = useRef(null);
 
     const isDrawing = useRef(false);
     const isMidDrag = useRef(false);
@@ -33,6 +35,8 @@ export default function MapEditor() {
     const [foamEnabled, setFoamEnabled] = useState(true);
     const [waveHeight, setWaveHeight] = useState(0.12);
     const [waveSpeed, setWaveSpeed] = useState(1.0);
+    const [selectedObject, setSelectedObject] = useState('oak1');
+    const [objectScale, setObjectScale] = useState(100);
     const [tool, setTool] = useState('texture');
     const [catalog, setCatalog] = useState([]);
     const [ready, setReady] = useState(false);
@@ -47,10 +51,17 @@ export default function MapEditor() {
         sceneRef.current = sm;
         textureManagerRef.current = tm;
 
-        sm.init();
+        sm.init(); // ← prvo init
         sm.setMapSize(MAP_PRESETS[DEFAULT_PRESET_INDEX].gridSize);
 
-        tm.loadAll().then(() => {
+// tek sad kreiramo ObjectManager jer sm.scene sada postoji
+        const om = new ObjectManager(sm.scene);
+        objectManagerRef.current = om;
+
+        Promise.all([
+            tm.loadAll(),
+            om.loadAll(),
+        ]).then(() => {
             const defaultPreset = MAP_PRESETS[DEFAULT_PRESET_INDEX];
 
             const terrain = new TerrainMesh(sm.scene);
@@ -88,9 +99,7 @@ export default function MapEditor() {
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
-        const observer = new ResizeObserver(() => {
-            sceneRef.current?.onResize();
-        });
+        const observer = new ResizeObserver(() => sceneRef.current?.onResize());
         const parent = canvas.parentElement;
         if (parent) observer.observe(parent);
         return () => observer.disconnect();
@@ -113,7 +122,6 @@ export default function MapEditor() {
     useEffect(() => {
         const handleKeyDown = (e) => { keysPressed.current[e.key.toLowerCase()] = true; };
         const handleKeyUp = (e) => { keysPressed.current[e.key.toLowerCase()] = false; };
-
         let rafId;
         const rotationLoop = () => {
             const sm = sceneRef.current;
@@ -124,7 +132,6 @@ export default function MapEditor() {
             rafId = requestAnimationFrame(rotationLoop);
         };
         rafId = requestAnimationFrame(rotationLoop);
-
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
         return () => {
@@ -158,16 +165,33 @@ export default function MapEditor() {
     function onMouseDown(e) {
         if (e.button === 0) {
             isDrawing.current = true;
-            const hit = brushRef.current?.updateCursor(getNDC(e));
+            const ndc = getNDC(e);
+            const hit = brushRef.current?.updateCursor(ndc);
+
+            if (tool === 'place_object') {
+                // postavi objekat na kliknutu tacku
+                if (hit) {
+                    const scale = objectScale / 100;
+                    objectManagerRef.current?.placeObject(selectedObject, hit.point, scale);
+                }
+                return;
+            }
+
+            if (tool === 'erase_object') {
+                // brisanje kliknutog objekta
+                const instanceId = objectManagerRef.current?.getClickedObject(ndc, sceneRef.current.camera);
+                if (instanceId !== null && instanceId !== undefined) {
+                    objectManagerRef.current.removeObject(instanceId);
+                }
+                return;
+            }
+
             if (hit) {
                 lastApply.current = performance.now();
                 brushRef.current.apply(hit, sceneRef.current.renderer);
             }
         }
-        if (e.button === 1) {
-            isMidDrag.current = true;
-            e.preventDefault();
-        }
+        if (e.button === 1) { isMidDrag.current = true; e.preventDefault(); }
         prevMouse.current = { x: e.clientX, y: e.clientY };
     }
 
@@ -179,12 +203,13 @@ export default function MapEditor() {
         if (!sm) return;
 
         const hit = brushRef.current?.updateCursor(getNDC(e));
-
         if (isMidDrag.current) sm.pan(dx, dy);
 
         if (isDrawing.current && hit && now - lastApply.current > 16) {
-            lastApply.current = now;
-            brushRef.current.apply(hit, sm.renderer);
+            if (tool !== 'place_object' && tool !== 'erase_object') {
+                lastApply.current = now;
+                brushRef.current.apply(hit, sm.renderer);
+            }
         }
 
         prevMouse.current = { x: e.clientX, y: e.clientY };
@@ -205,46 +230,19 @@ export default function MapEditor() {
 
     function handleClear() {
         terrainRef.current?.clear(sceneRef.current?.renderer);
+        objectManagerRef.current?.removeAll();
     }
 
-    function handleSelectTexture(id) {
-        setSelectedTexture(id);
-    }
-
-    function handleTexScale(v) {
-        setTexScale(v);
-        terrainRef.current?.setTexScale(v);
-    }
-
-    function handleTerrainSharpness(v) {
-        setTerrainSharpness(v);
-        brushRef.current?.setTerrainSharpness(v);
-    }
-
-    function handleWaterSharpness(v) {
-        setWaterSharpness(v);
-        waterRef.current?.setSharpness(v);
-    }
-
-    function handleWaterHue(v) {
-        setWaterHue(v);
-        waterRef.current?.setColorHue(v);
-    }
-
-    function handleFoamToggle(enabled) {
-        setFoamEnabled(enabled);
-        waterRef.current?.setFoam(enabled);
-    }
-
-    function handleWaveHeight(v) {
-        setWaveHeight(v);
-        waterRef.current?.setWaveHeight(v);
-    }
-
-    function handleWaveSpeed(v) {
-        setWaveSpeed(v);
-        waterRef.current?.setWaveSpeed(v);
-    }
+    function handleSelectTexture(id) { setSelectedTexture(id); }
+    function handleTexScale(v) { setTexScale(v); terrainRef.current?.setTexScale(v); }
+    function handleTerrainSharpness(v) { setTerrainSharpness(v); brushRef.current?.setTerrainSharpness(v); }
+    function handleWaterSharpness(v) { setWaterSharpness(v); waterRef.current?.setSharpness(v); }
+    function handleWaterHue(v) { setWaterHue(v); waterRef.current?.setColorHue(v); }
+    function handleFoamToggle(enabled) { setFoamEnabled(enabled); waterRef.current?.setFoam(enabled); }
+    function handleWaveHeight(v) { setWaveHeight(v); waterRef.current?.setWaveHeight(v); }
+    function handleWaveSpeed(v) { setWaveSpeed(v); waterRef.current?.setWaveSpeed(v); }
+    function handleSelectObject(id) { setSelectedObject(id); }
+    function handleObjectScale(v) { setObjectScale(v); }
 
     function handleMapPreset(index) {
         const preset = MAP_PRESETS[index];
@@ -263,12 +261,7 @@ export default function MapEditor() {
     }
 
     return (
-        <div style={{
-            display: 'flex',
-            width: '100%',
-            height: '100%',
-            overflow: 'hidden',
-        }}>
+        <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
             <EditorUI
                 catalog={catalog}
                 selectedTexture={selectedTexture}
@@ -291,6 +284,10 @@ export default function MapEditor() {
                 onWaveHeight={handleWaveHeight}
                 waveSpeed={waveSpeed}
                 onWaveSpeed={handleWaveSpeed}
+                selectedObject={selectedObject}
+                onSelectObject={handleSelectObject}
+                objectScale={objectScale}
+                onObjectScale={handleObjectScale}
                 tool={tool}
                 onTool={setTool}
                 onReset={handleReset}

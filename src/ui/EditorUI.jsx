@@ -1,11 +1,14 @@
 import React from 'react';
 import { MAP_PRESETS } from '../editor/TerrainMesh';
+import { OBJECT_CATALOG } from '../editor/ObjectManager';
 
 const TOOLS = [
     { id: 'texture',       label: 'Dodaj teksturu' },
     { id: 'erase_texture', label: 'Briši teksturu' },
     { id: 'hill',          label: 'Dodaj brdo' },
     { id: 'erase_height',  label: 'Spusti teren' },
+    { id: 'place_object',  label: 'Postavi objekat' },
+    { id: 'erase_object',  label: 'Briši objekat' },
 ];
 
 export default function EditorUI({
@@ -19,6 +22,8 @@ export default function EditorUI({
                                      foamEnabled, onFoamToggle,
                                      waveHeight, onWaveHeight,
                                      waveSpeed, onWaveSpeed,
+                                     selectedObject, onSelectObject,
+                                     objectScale, onObjectScale,
                                      tool, onTool,
                                      onReset, onClear,
                                      mapPresetIndex, onMapPreset,
@@ -85,8 +90,40 @@ export default function EditorUI({
                 ))}
             </Section>
 
+            <Section label="Objekti">
+                {OBJECT_CATALOG.map(({ id, label }) => (
+                    <div
+                        key={id}
+                        onClick={() => { onSelectObject(id); onTool('place_object'); }}
+                        style={{
+                            cursor: 'pointer', padding: '6px 8px',
+                            borderRadius: 6, fontSize: 12,
+                            border: `1px solid ${selectedObject === id && tool === 'place_object' ? '#639922' : '#ccc'}`,
+                            background: selectedObject === id && tool === 'place_object' ? '#EAF3DE' : 'transparent',
+                            color: selectedObject === id && tool === 'place_object' ? '#3B6D11' : '#333',
+                        }}
+                    >
+                        🌳 {label}
+                    </div>
+                ))}
+                <SliderRow
+                    label="Veličina objekta"
+                    value={objectScale}
+                    min={10} max={500}
+                    onChange={onObjectScale}
+                    suffix="%"
+                />
+            </Section>
+
             <Section label="Četkica">
-                <SliderRow label="Veličina" value={brushSize} min={1} max={10} onChange={onBrushSize} />
+                <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                        <span style={{ fontSize: 12, color: '#666' }}>Veličina</span>
+                        <span style={{ fontSize: 12, fontWeight: 500 }}>{brushSize}</span>
+                    </div>
+                    <input type="range" min={1} max={20} step={1} value={brushSize * 2}
+                           onChange={e => onBrushSize(Number(e.target.value) / 2)} style={{ width: '100%' }} />
+                </div>
                 <SliderRow label="Jačina" value={Math.round(brushStrength * 100)} min={5} max={100}
                            onChange={v => onBrushStrength(v / 100)} suffix="%" />
                 <SliderRow label="Gustina teksture" value={texScale} min={4} max={48} onChange={onTexScale} />
@@ -95,32 +132,22 @@ export default function EditorUI({
 
             <Section label="Voda">
                 <SliderRow label="Oštrina obale" value={waterSharpness} min={1} max={10} onChange={onWaterSharpness} />
-
                 <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                        <span style={{ fontSize: 12, color: '#666' }}>Veličina</span>
-                        <span style={{ fontSize: 12, fontWeight: 500 }}>{brushSize}</span>
+                        <span style={{ fontSize: 12, color: '#666' }}>Boja vode</span>
+                        <span style={{ fontSize: 12, fontWeight: 500 }}>{hueLabel}</span>
                     </div>
-                    <input
-                        type="range" min={1} max={20} step={1} value={brushSize * 2}
-                        onChange={e => onBrushSize(Number(e.target.value) / 2)}
-                        style={{ width: '100%' }}
-                    />
+                    <input type="range" min={0} max={100} value={Math.round(waterHue * 100)}
+                           onChange={e => onWaterHue(Number(e.target.value) / 100)} style={{ width: '100%' }} />
+                    <div style={{
+                        height: 6, borderRadius: 3, marginTop: 4,
+                        background: 'linear-gradient(to right, #1a6bb5, #0fb89a, #7a5c1a)',
+                    }} />
                 </div>
-
-                <SliderRow
-                    label="Visina talasa"
-                    value={Math.round(waveHeight * 100)}
-                    min={0} max={50}
-                    onChange={v => onWaveHeight(v / 100)}
-                />
-                <SliderRow
-                    label="Brzina talasa"
-                    value={Math.round(waveSpeed * 10)}
-                    min={0} max={30}
-                    onChange={v => onWaveSpeed(v / 10)}
-                />
-
+                <SliderRow label="Visina talasa" value={Math.round(waveHeight * 100)} min={0} max={50}
+                           onChange={v => onWaveHeight(v / 100)} />
+                <SliderRow label="Brzina talasa" value={Math.round(waveSpeed * 10)} min={0} max={30}
+                           onChange={v => onWaveSpeed(v / 10)} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: 12, color: '#666' }}>Pena na obali</span>
                     <button onClick={() => onFoamToggle(!foamEnabled)} style={{
